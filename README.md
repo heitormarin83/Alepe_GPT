@@ -1,18 +1,23 @@
-# Alepe GPT Monitor
+# Alepe GPT Robot
 
-Um robô que consulta proposições no site da Alepe e envia e-mail diário com as atualizações.
+Robo para capturar dados de proposições na ALEPE e enviar por e-mail.
 
-## Como usar no Railway
+## Funcionalidades:
+- 🔥 Envio de logs no corpo do e-mail.
+- 🔥 Loop de debug para Railway.
+- 🔥 API via FastAPI com endpoints:
+  - `/` → Status
+  - `/run` → Executa o robô manualmente
 
-1. Crie um projeto Railway conectado ao seu GitHub.
-2. Configure as variáveis de ambiente:
+## Como rodar no Railway:
+1. Configure as variáveis de ambiente:
    - EMAIL_USER
-   - EMAIL_APP_PASSWORD (Senha de aplicativo do Gmail)
+   - EMAIL_APP_PASSWORD
    - EMAIL_RECIPIENT
-   - DOCID (Ex: 15016)
-   - TIPOPROP (Ex: p)
-3. Clique em Deploy.
+   - DOCID
+   - TIPOPROP
+2. Deploy direto do GitHub com Dockerfile.
 
-## Cron Job
-
-- Configure um cron job na aba Plugins para rodar diariamente:
+## Comandos:
+- Container sobe rodando uma API FastAPI.
+- Ou roda automaticamente pelo `main.py` com o loop de debug.
