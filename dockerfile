@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . /app
 
-# Instala dependências do sistema necessárias para browsers headless
+# Instala dependências de sistema necessárias
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -23,15 +23,13 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala dependências Python
+# Instala pacotes Python
 RUN pip install --upgrade pip --no-cache-dir
 RUN pip install -r requirements.txt --no-cache-dir
 
-# Instala os navegadores do Playwright
-RUN playwright install
+# Instala navegadores do Playwright
+RUN playwright install --with-deps
 
-# Exponha a porta (opcional, para claridade)
 EXPOSE 8000
 
-# Comando para rodar a API
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
