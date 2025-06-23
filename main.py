@@ -4,6 +4,7 @@ import yagmail
 import os
 from dotenv import load_dotenv
 
+# Carregar variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -27,7 +28,7 @@ def consultar_api_alepe(docid, tipoprop):
         "Content-Type": "application/x-www-form-urlencoded"
     }
 
-    logs.append(f"🔗 Acessando: {url} com docid={docid} e tipoprop={tipoprop}")
+    logs.append(f"🔗 Acessando API da ALEPE para docid={docid} e tipoprop={tipoprop}")
 
     try:
         response = requests.post(url, data=payload, headers=headers, timeout=30)
@@ -38,11 +39,12 @@ def consultar_api_alepe(docid, tipoprop):
         if not dados:
             raise Exception("❌ Nenhum dado retornado da API.")
 
-        titulo = dados.get("tipo_proposicao", "Título não encontrado") + " " + dados.get("numero_proposicao", "") + "/" + dados.get("ano_proposicao", "")
+        titulo = f"{dados.get('tipo_proposicao', 'Título não encontrado')} {dados.get('numero_proposicao', '')}/{dados.get('ano_proposicao', '')}"
         ementa = dados.get("ementa", "Ementa não encontrada")
         situacao = dados.get("situacao", "Situação não encontrada")
-        historico = dados.get("historico", "Histórico não encontrado")
-        info_complementar = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+        data_apresentacao = dados.get("data_apresentacao", "Data não encontrada")
+        historico = dados.get("historico", "Histórico não encontrado") or "Histórico não encontrado"
+        info_complementar = dados.get("informacoes_complementares", "Informações complementares não encontradas") or "Informações complementares não encontradas"
 
         logs.append("✅ Dados capturados com sucesso")
 
@@ -50,6 +52,7 @@ def consultar_api_alepe(docid, tipoprop):
             "titulo": titulo,
             "ementa": ementa,
             "situacao": situacao,
+            "data_apresentacao": data_apresentacao,
             "historico": historico,
             "info_complementar": info_complementar,
             "url": f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}",
@@ -65,14 +68,15 @@ def consultar_api_alepe(docid, tipoprop):
 def gerar_template_email(dados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
-    historico = dados['historico'].replace("\n", "<br>")
-    info_complementar = dados['info_complementar'].replace("\n", "<br>")
+    historico = dados['historico'].replace("\n", "<br>").replace("\r", "<br>")
+    info_complementar = dados['info_complementar'].replace("\n", "<br>").replace("\r", "<br>")
 
     html = f"""
     <div style="font-family:Arial; color:#333;">
         <h2 style="color:#004b87;">{dados['titulo']}</h2>
-        <p><strong>Ementa:</strong><br>{dados['ementa']}</p>
+        <p><strong><u>Ementa:</u></strong><br>{dados['ementa']}</p>
         <p><strong>Situação:</strong> {dados['situacao']}</p>
+        <p><strong>Data de Apresentação:</strong> {dados['data_apresentacao']}</p>
         <hr>
         <h3 style="color:#004b87;">Histórico</h3>
         <p>{historico}</p>
@@ -82,7 +86,7 @@ def gerar_template_email(dados):
         <hr>
         <p>
             <small>Consulta realizada em {agora} | 
-            <a href="{dados['url']}" target="_blank">Acessar Proposição</a></small>
+            <a href="{dados['url']}" target="_blank">Acessar Proposição na ALEPE</a></small>
         </p>
     </div>
     """
@@ -95,7 +99,7 @@ def enviar_email(assunto, corpo_html, logs):
         yag.send(
             to=EMAIL_RECIPIENT,
             subject=assunto,
-            contents=[corpo_html, "\n\nLogs:\n" + "\n".join(logs)]
+            contents=[corpo_html, "\n\nLogs de execução:\n" + "\n".join(logs)]
         )
         print("✅ E-mail enviado com sucesso!")
     except Exception as e:
@@ -103,7 +107,7 @@ def enviar_email(assunto, corpo_html, logs):
 
 
 def executar_robot(docid=None, tipoprop=None):
-    print("🚀 Iniciando execução do Alepe_GPT com API")
+    print("🚀 Iniciando execução do Alepe_GPT via API")
     docid = docid or DOCID
     tipoprop = tipoprop or TIPOPROP
 
@@ -123,11 +127,6 @@ def executar_robot(docid=None, tipoprop=None):
     assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
     enviar_email(assunto, corpo_email, dados['log'])
     return {"status": "sucesso", "dados": dados, "logs": dados['log']}
-
-
-if __name__ == "__main__":
-    resultado = executar_robot()
-    print(resultado)
 
 
 if __name__ == "__main__":
