@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
+
+# Carregar variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -14,40 +16,51 @@ TIPOPROP = os.getenv("TIPOPROP")
 
 
 def consultar_proposicao(docid, tipoprop):
+    print("🚀 Iniciando captura da proposição")
     url = f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}"
+    print(f"🔗 URL da proposição: {url}")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    try:
+        with sync_playwright() as p:
+            print("🌐 Abrindo navegador headless")
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        page.goto(url, timeout=60000)
+            print("⏳ Acessando a página...")
+            page.goto(url, timeout=60000)
 
-        titulo = page.locator("h1.titulo").inner_text()
-        ementa = page.locator("div.ementa").inner_text()
+            titulo = page.locator("h1.titulo").inner_text()
+            ementa = page.locator("div.ementa").inner_text()
 
-        try:
-            historico = page.locator("#historico").inner_text()
-        except:
-            historico = "Não encontrado"
+            try:
+                historico = page.locator("#historico").inner_text()
+            except:
+                historico = "Não encontrado"
 
-        try:
-            info_complementar = page.locator("#informacoesComplementares").inner_text()
-        except:
-            info_complementar = "Não encontrado"
+            try:
+                info_complementar = page.locator("#informacoesComplementares").inner_text()
+            except:
+                info_complementar = "Não encontrado"
 
-        browser.close()
+            browser.close()
 
-        return {
-            "titulo": titulo,
-            "ementa": ementa,
-            "historico": historico,
-            "info_complementar": info_complementar,
-            "url": url
-        }
+            print("✅ Dados capturados com sucesso")
+            return {
+                "titulo": titulo,
+                "ementa": ementa,
+                "historico": historico,
+                "info_complementar": info_complementar,
+                "url": url
+            }
+
+    except Exception as e:
+        print(f"❌ Erro na captura dos dados: {e}")
+        return None
 
 
 def gerar_template_email(dados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    print("📝 Gerando template do e-mail")
     html = f"""
     <div style="font-family:Arial; color:#333;">
         <h2 style="color:#004b87;">{dados['titulo']}</h2>
@@ -69,6 +82,7 @@ def gerar_template_email(dados):
 
 
 def enviar_email(assunto, corpo_html, destinatario, remetente, senha_app):
+    print("📧 Preparando envio de e-mail")
     try:
         yag = yagmail.SMTP(remetente, senha_app)
         yag.send(
@@ -81,7 +95,26 @@ def enviar_email(assunto, corpo_html, destinatario, remetente, senha_app):
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
+def validar_variaveis():
+    print("🔍 Verificando variáveis de ambiente")
+    variaveis = [EMAIL_USER, EMAIL_APP_PASSWORD, EMAIL_RECIPIENT, DOCID, TIPOPROP]
+    nomes = ["EMAIL_USER", "EMAIL_APP_PASSWORD", "EMAIL_RECIPIENT", "DOCID", "TIPOPROP"]
+
+    for valor, nome in zip(variaveis, nomes):
+        if not valor:
+            print(f"⚠️ Variável de ambiente {nome} não definida!")
+            return False
+    print("✔️ Todas as variáveis de ambiente estão definidas.")
+    return True
+
+
 if __name__ == "__main__":
+    print("🚀 Iniciando execução do Alepe_GPT")
+
+    if not validar_variaveis():
+        print("❌ Encerrando execução por falta de variáveis de ambiente")
+        exit(1)
+
     dados = consultar_proposicao(DOCID, TIPOPROP)
 
     if dados:
@@ -89,4 +122,4 @@ if __name__ == "__main__":
         assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
         enviar_email(assunto, corpo_email, EMAIL_RECIPIENT, EMAIL_USER, EMAIL_APP_PASSWORD)
     else:
-        print("Erro na consulta da proposição.")
+        print("❌ Não foi possível capturar os dados da proposição.")
