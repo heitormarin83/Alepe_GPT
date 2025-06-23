@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY . /app
 
+# Instala dependências de sistema necessárias para o Chromium do Playwright
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -14,21 +15,19 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     libxfixes3 \
     libc6 \
+    libxext6 \
     libx11-6 \
-    libxcb1 \
-    libxtst6 \
     libasound2 \
-    libgbm1 \
     libxkbcommon0 \
+    libgbm1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala Python deps
-RUN pip install --upgrade pip --no-cache-dir
-RUN pip install -r requirements.txt --no-cache-dir
+# Instala dependências Python
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 
-# 🔥 OBRIGATÓRIO: instala os browsers (Chromium, Firefox, Webkit)
-RUN playwright install --with-deps
-
-EXPOSE 8000
+# Instala navegadores do Playwright
+RUN playwright install
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
