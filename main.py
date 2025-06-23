@@ -14,21 +14,29 @@ EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 def consultar_proposicao(proposicao, numero, ano):
     logs = []
     logs.append("🚀 Iniciando captura via API da ALEPE")
-    
+
     url = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
     logs.append(f"🔗 Acessando API: {url}")
 
     try:
         response = requests.get(url, timeout=60)
-        response.raise_for_status()
-        dados = response.json()
+        logs.append(f"📥 Status da resposta: {response.status_code}")
 
-        logs.append("✅ Dados capturados com sucesso")
+        if response.status_code != 200:
+            logs.append(f"❌ Erro na captura: Status {response.status_code}")
+            return {"erro": f"Status {response.status_code}", "logs": logs}
+
+        if not response.content:
+            logs.append("⚠️ Resposta vazia da API.")
+            return {"erro": "Resposta vazia", "logs": logs}
+
+        dados = response.json()
 
         if not dados:
             logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
-            return {"dados": {}, "logs": logs}
+            return {"erro": "Nenhum dado encontrado", "logs": logs}
 
+        logs.append("✅ Dados capturados com sucesso")
         return {"dados": dados, "logs": logs}
 
     except Exception as e:
@@ -71,10 +79,6 @@ def executar_robot(proposicao, numero, ano):
 
 
 if __name__ == "__main__":
+    # 🔥 Informe os dados corretamente
     resultado = executar_robot("projetos", "3005", "2025")
-    print(resultado)
-
-
-if __name__ == "__main__":
-    resultado = executar_robot()
     print(resultado)
