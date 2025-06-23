@@ -1,12 +1,12 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import yagmail
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
+# Variáveis de ambiente
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
@@ -15,64 +15,56 @@ TIPOPROP = os.getenv("TIPOPROP")
 
 
 def consultar_proposicao(docid, tipoprop):
-    log = []
-    log.append("🚀 Iniciando captura da proposição")
+    logs = []
+    logs.append("🚀 Iniciando captura da proposição")
     url = f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}"
-    log.append(f"🔗 Acessando: {url}")
+    logs.append(f"🔗 Acessando: {url}")
 
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            page.goto(url, timeout=90000)
+            page.goto(url, timeout=120000)  # Aumentei o timeout para carregar
 
-            try:
-                titulo = page.locator("h1.titulo").inner_text(timeout=30000)
-            except:
-                titulo = "Título não encontrado"
-                log.append("⚠️ Título não encontrado.")
+            def captura_seletor(seletor, descricao):
+                try:
+                    page.wait_for_selector(seletor, timeout=30000)
+                    valor = page.locator(seletor).inner_text()
+                    return valor
+                except PlaywrightTimeoutError:
+                    logs.append(f"⚠️ {descricao} não encontrado.")
+                    return f"{descricao} não encontrado"
+                except Exception as e:
+                    logs.append(f"❌ Erro ao capturar {descricao}: {e}")
+                    return f"{descricao} não encontrado"
 
-            try:
-                ementa = page.locator("div.ementa").inner_text(timeout=30000)
-            except:
-                ementa = "Ementa não encontrada"
-                log.append("⚠️ Ementa não encontrada.")
-
-            try:
-                historico = page.locator("#historico").inner_text(timeout=30000)
-            except:
-                historico = "Histórico não encontrado"
-                log.append("⚠️ Histórico não encontrado.")
-
-            try:
-                info_complementar = page.locator("#informacoesComplementares").inner_text(timeout=30000)
-            except:
-                info_complementar = "Informações Complementares não encontradas"
-                log.append("⚠️ Informações complementares não encontradas.")
+            titulo = captura_seletor("h1.titulo", "Título")
+            ementa = captura_seletor("div.ementa", "Ementa")
+            historico = captura_seletor("#historico", "Histórico")
+            info_complementar = captura_seletor("#informacoesComplementares", "Informações Complementares")
 
             browser.close()
 
-            log.append("✅ Dados capturados com sucesso")
+            logs.append("✅ Dados capturados com sucesso")
             return {
                 "titulo": titulo,
                 "ementa": ementa,
                 "historico": historico,
                 "info_complementar": info_complementar,
                 "url": url,
-                "log": log
+                "log": logs
             }
 
     except Exception as e:
-        log.append(f"❌ Erro na captura: {e}")
-        print(f"❌ Erro na captura: {e}")
-        return {"erro": str(e), "log": log}
+        logs.append(f"❌ Erro na captura: {e}")
+        return {"erro": str(e), "log": logs}
 
 
 def gerar_template_email(dados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-    historico_formatado = dados['historico'].replace("\n", "<br>")
-    info_complementar_formatado = dados['info_complementar'].replace("\n", "<br>")
+    historico = dados['historico'].replace("\n", "<br>")
+    info_complementar = dados['info_complementar'].replace("\n", "<br>")
 
     html = f"""
     <div style="font-family:Arial; color:#333;">
@@ -80,10 +72,10 @@ def gerar_template_email(dados):
         <p><strong>Ementa:</strong><br>{dados['ementa']}</p>
         <hr>
         <h3 style="color:#004b87;">Histórico</h3>
-        <p>{historico_formatado}</p>
+        <p>{historico}</p>
         <hr>
         <h3 style="color:#004b87;">Informações Complementares</h3>
-        <p>{info_complementar_formatado}</p>
+        <p>{info_complementar}</p>
         <hr>
         <p>
             <small>Consulta realizada em {agora} | 
@@ -109,7 +101,6 @@ def enviar_email(assunto, corpo_html, logs):
 
 def executar_robot(docid=None, tipoprop=None):
     print("🚀 Iniciando execução do Alepe_GPT")
-
     docid = docid or DOCID
     tipoprop = tipoprop or TIPOPROP
 
@@ -124,6 +115,11 @@ def executar_robot(docid=None, tipoprop=None):
     assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
     enviar_email(assunto, corpo_email, dados['log'])
     return {"status": "sucesso", "dados": dados, "logs": dados['log']}
+
+
+if __name__ == "__main__":
+    resultado = executar_robot()
+    print(resultado)
 
 
 if __name__ == "__main__":
