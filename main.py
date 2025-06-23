@@ -3,22 +3,17 @@ import yagmail
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-import time
 
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
-DOCID = os.getenv("DOCID")
-TIPOPROP = os.getenv("TIPOPROP")
 
 
 def consultar_proposicao(docid, tipoprop):
-    log = []
-    log.append("🚀 Iniciando captura da proposição")
     url = f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}"
-    log.append(f"🔗 Acessando: {url}")
+    print(f"🔗 Acessando: {url}")
 
     try:
         with sync_playwright() as p:
@@ -42,19 +37,17 @@ def consultar_proposicao(docid, tipoprop):
 
             browser.close()
 
-            log.append("✅ Dados capturados com sucesso")
             return {
                 "titulo": titulo,
                 "ementa": ementa,
                 "historico": historico,
                 "info_complementar": info_complementar,
-                "url": url,
-                "log": log
+                "url": url
             }
 
     except Exception as e:
-        log.append(f"❌ Erro na captura: {e}")
-        return {"erro": str(e), "log": log}
+        print(f"❌ Erro na captura: {e}")
+        return None
 
 
 def gerar_template_email(dados):
@@ -70,39 +63,44 @@ def gerar_template_email(dados):
         <h3 style="color:#004b87;">Informações Complementares</h3>
         <p>{dados['info_complementar'].replace("\n", "<br>")}</p>
         <hr>
-        <p><small>Consulta realizada em {agora} | 
-        <a href="{dados['url']}" target="_blank">Acessar Proposição</a></small></p>
+        <p>
+            <small>Consulta realizada em {agora} | 
+            <a href="{dados['url']}" target="_blank">Acessar Proposição</a></small>
+        </p>
     </div>
     """
     return html
 
 
-def enviar_email(assunto, corpo_html, logs):
+def enviar_email(assunto, corpo_html):
     try:
         yag = yagmail.SMTP(EMAIL_USER, EMAIL_APP_PASSWORD)
         yag.send(
             to=EMAIL_RECIPIENT,
             subject=assunto,
-            contents=[corpo_html, "\n\nLogs:\n" + "\n".join(logs)]
+            contents=corpo_html
         )
         print("✅ E-mail enviado com sucesso!")
     except Exception as e:
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
-def executar_robot():
-    print("🚀 Iniciando execução do Alepe_GPT")
-    dados = consultar_proposicao(DOCID, TIPOPROP)
+def executar_robot_parametrizado(docid, tipoprop):
+    dados = consultar_proposicao(docid, tipoprop)
 
-    if 'erro' in dados:
-        assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, "Erro na execução", dados.get('log', []))
-        return {"status": "erro", "logs": dados['log']}
-
-    corpo_email = gerar_template_email(dados)
-    assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
-    enviar_email(assunto, corpo_email, dados['log'])
-    return {"status": "sucesso", "dados": dados}
+    if dados:
+        corpo_email = gerar_template_email(dados)
+        assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
+        enviar_email(assunto, corpo_email)
+        return {
+            "status": "sucesso",
+            "dados": dados
+        }
+    else:
+        return {
+            "status": "erro",
+            "mensagem": "Não foi possível capturar os dados da proposição."
+        }
 
 
 if __name__ == "__main__":
