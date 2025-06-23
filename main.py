@@ -1,103 +1,78 @@
 import requests
-from requests.exceptions import HTTPError
-from dotenv import load_dotenv
+from datetime import datetime
 import yagmail
 import os
-from datetime import datetime
+from dotenv import load_dotenv
 
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
-DOCID = os.getenv("DOCID")
-TIPOPROP = os.getenv("TIPOPROP")
 
 
-def consultar_proposicao_api(docid, tipoprop):
+def consultar_proposicao(proposicao, numero, ano):
     logs = []
     logs.append("🚀 Iniciando captura via API da ALEPE")
-
-    url = f"https://www.alepe.pe.gov.br/wp-json/alepe/v1/proposicoes/{docid}"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-    }
-
-    logs.append(f"🔗 Acessando API da ALEPE para docid={docid} e tipoprop={tipoprop}")
+    
+    url = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
+    logs.append(f"🔗 Acessando API: {url}")
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, timeout=60)
         response.raise_for_status()
+        dados = response.json()
 
-        data = response.json()
+        logs.append("✅ Dados capturados com sucesso")
 
-        titulo = data.get('titulo', 'Título não encontrado')
-        ementa = data.get('ementa', 'Ementa não encontrada')
-        historico = data.get('historico', 'Histórico não encontrado')
-        info_complementar = data.get('informacoesComplementares', 'Informações Complementares não encontradas')
+        if not dados:
+            logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
+            return {"dados": {}, "logs": logs}
 
-        logs.append("✅ Dados capturados com sucesso via API")
-        return {
-            "titulo": titulo,
-            "ementa": ementa,
-            "historico": historico,
-            "info_complementar": info_complementar,
-            "url": url,
-            "log": logs
-        }
+        return {"dados": dados, "logs": logs}
 
-    except HTTPError as http_err:
-        logs.append(f"❌ Erro HTTP: {http_err}")
-        return {"erro": str(http_err), "log": logs}
-
-    except Exception as err:
-        logs.append(f"❌ Erro geral na captura: {err}")
-        return {"erro": str(err), "log": logs}
+    except Exception as e:
+        logs.append(f"❌ Erro na captura: {e}")
+        return {"erro": str(e), "logs": logs}
 
 
-def enviar_email(assunto, corpo, logs):
+def enviar_email(assunto, conteudo, logs):
     try:
         yag = yagmail.SMTP(EMAIL_USER, EMAIL_APP_PASSWORD)
         yag.send(
             to=EMAIL_RECIPIENT,
             subject=assunto,
-            contents=[corpo, "\n\nLogs:\n" + "\n".join(logs)]
+            contents=[conteudo, "\n\nLogs:\n" + "\n".join(logs)]
         )
-        print("✅ E-mail enviado com sucesso")
+        print("✅ E-mail enviado com sucesso!")
     except Exception as e:
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
-def executar_robot(docid=None, tipoprop=None):
-    print("🚀 Iniciando execução do Alepe_GPT via API")
+def executar_robot(proposicao, numero, ano):
+    print("🚀 Iniciando execução do Alepe_GPT com API")
+    resultado = consultar_proposicao(proposicao, numero, ano)
 
-    docid = docid or DOCID
-    tipoprop = tipoprop or TIPOPROP
-
-    if not docid or not tipoprop:
-        erro = "❌ DOCID ou TIPOPROP não definidos na função ou no .env"
-        print(erro)
-        return {"status": "erro", "logs": [erro]}
-
-    dados = consultar_proposicao_api(docid, tipoprop)
-
-    if 'erro' in dados:
+    if 'erro' in resultado:
         assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, "❌ Erro na execução", dados.get('log', []))
-        return {"status": "erro", "logs": dados['log']}
+        enviar_email(assunto, "❌ Erro na execução", resultado['logs'])
+        return {"status": "erro", "logs": resultado['logs']}
 
-    assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
-    corpo = f"""
-Título: {dados['titulo']}
-Ementa: {dados['ementa']}
-Histórico: {dados['historico']}
-Informações Complementares: {dados['info_complementar']}
-Link: {dados['url']}
-"""
-    enviar_email(assunto, corpo, dados['log'])
-    return {"status": "sucesso", "dados": dados, "logs": dados['log']}
+    dados = resultado['dados']
+    texto_email = f"""
+    <h2>Resultado da Proposição {numero}/{ano}</h2>
+    <pre>{dados}</pre>
+    """
+
+    assunto = f"Acompanhamento ALEPE - {proposicao.upper()} {numero}/{ano} - {datetime.now().strftime('%d/%m/%Y')}"
+    enviar_email(assunto, texto_email, resultado['logs'])
+
+    return {"status": "sucesso", "dados": dados, "logs": resultado['logs']}
+
+
+if __name__ == "__main__":
+    resultado = executar_robot("projetos", "3005", "2025")
+    print(resultado)
 
 
 if __name__ == "__main__":
