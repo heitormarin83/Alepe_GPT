@@ -1,10 +1,10 @@
-# Imagem base com suporte para Playwright
+# Imagem atualizada do Playwright com Python e browsers
 FROM mcr.microsoft.com/playwright/python:v1.52.0-jammy
 
-# Setar diretório de trabalho
+# Diretório de trabalho
 WORKDIR /app
 
-# Copiar tudo para dentro do container
+# Copiar arquivos do projeto
 COPY . /app
 
 # Instalar dependências do Python
