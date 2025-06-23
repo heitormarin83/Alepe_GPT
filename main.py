@@ -4,6 +4,7 @@ import yagmail
 import os
 from dotenv import load_dotenv
 
+# Carregar variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -19,14 +20,14 @@ def consultar_proposicao(proposicao, numero, ano):
     logs.append(f"🔗 Acessando API: {url}")
 
     try:
-        response = requests.get(url, timeout=60)
+        response = requests.get(url, timeout=60, headers={"Accept": "application/json"})
         logs.append(f"📥 Status da resposta: {response.status_code}")
 
         if response.status_code != 200:
-            logs.append(f"❌ Erro na captura: Status {response.status_code}")
-            return {"erro": f"Status {response.status_code}", "logs": logs}
+            logs.append(f"❌ Erro na API: {response.status_code} - {response.text}")
+            return {"erro": f"API retornou status {response.status_code}", "logs": logs}
 
-        if not response.content:
+        if not response.text.strip():
             logs.append("⚠️ Resposta vazia da API.")
             return {"erro": "Resposta vazia", "logs": logs}
 
@@ -34,7 +35,8 @@ def consultar_proposicao(proposicao, numero, ano):
             dados = response.json()
         except Exception as e:
             logs.append(f"❌ Erro ao converter JSON: {e}")
-            return {"erro": "JSON inválido", "logs": logs}
+            logs.append(f"📝 Conteúdo retornado: {response.text}")
+            return {"erro": "JSON inválido ou resposta fora do padrão", "logs": logs}
 
         if not dados:
             logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
@@ -44,7 +46,7 @@ def consultar_proposicao(proposicao, numero, ano):
         return {"dados": dados, "logs": logs}
 
     except Exception as e:
-        logs.append(f"❌ Erro na captura: {e}")
+        logs.append(f"❌ Erro na requisição: {e}")
         return {"erro": str(e), "logs": logs}
 
 
@@ -72,7 +74,7 @@ def executar_robot(proposicao, numero, ano):
 
     dados = resultado['dados']
     texto_email = f"""
-    <h2>Resultado da Proposição {numero}/{ano}</h2>
+    <h2>Resultado da Proposição {proposicao.upper()} {numero}/{ano}</h2>
     <pre>{dados}</pre>
     """
 
@@ -83,6 +85,6 @@ def executar_robot(proposicao, numero, ano):
 
 
 if __name__ == "__main__":
-    # 🔥 Teste com dados válidos
+    # ⚙️ Defina aqui qual proposição quer buscar
     resultado = executar_robot("projetos", "1", "2023")
     print(resultado)
