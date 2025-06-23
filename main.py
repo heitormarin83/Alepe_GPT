@@ -23,20 +23,31 @@ def consultar_proposicao(docid, tipoprop):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            page.goto(url, timeout=60000)
-
-            titulo = page.locator("h1.titulo").inner_text()
-            ementa = page.locator("div.ementa").inner_text()
+            page.goto(url, timeout=90000)
 
             try:
-                historico = page.locator("#historico").inner_text()
+                titulo = page.locator("h1.titulo").inner_text(timeout=30000)
             except:
-                historico = "Não encontrado"
+                titulo = "Título não encontrado"
+                log.append("⚠️ Título não encontrado.")
 
             try:
-                info_complementar = page.locator("#informacoesComplementares").inner_text()
+                ementa = page.locator("div.ementa").inner_text(timeout=30000)
             except:
-                info_complementar = "Não encontrado"
+                ementa = "Ementa não encontrada"
+                log.append("⚠️ Ementa não encontrada.")
+
+            try:
+                historico = page.locator("#historico").inner_text(timeout=30000)
+            except:
+                historico = "Histórico não encontrado"
+                log.append("⚠️ Histórico não encontrado.")
+
+            try:
+                info_complementar = page.locator("#informacoesComplementares").inner_text(timeout=30000)
+            except:
+                info_complementar = "Informações Complementares não encontradas"
+                log.append("⚠️ Informações complementares não encontradas.")
 
             browser.close()
 
@@ -52,6 +63,7 @@ def consultar_proposicao(docid, tipoprop):
 
     except Exception as e:
         log.append(f"❌ Erro na captura: {e}")
+        print(f"❌ Erro na captura: {e}")
         return {"erro": str(e), "log": log}
 
 
