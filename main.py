@@ -123,9 +123,3 @@ def executar_robot_parametrizado(docid, tipoprop):
 if __name__ == "__main__":
     resultado = executar_robot_parametrizado("15016", "p")
     print(resultado)
-
-
-if __name__ == "__main__":
-    resultado = executar_robot()
-    print("🔁 Mantendo o container aberto para debug...")
-    time.sleep(300)  # 5 minutos
