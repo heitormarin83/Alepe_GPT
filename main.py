@@ -10,25 +10,39 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 DOCID = os.getenv("DOCID")
+TIPOPROP = os.getenv("TIPOPROP")
 
 
-def consultar_api_alepe(docid):
+def consultar_api_alepe(docid, tipoprop):
     logs = []
     logs.append("🚀 Iniciando captura via API da ALEPE")
 
-    url = f"https://www.alepe.pe.gov.br/wp-json/alepe/v1/proposicoes/{docid}"
-    logs.append(f"🔗 Acessando: {url}")
+    url = "https://www.alepe.pe.gov.br/wp-admin/admin-ajax.php"
+    payload = {
+        "action": "buscar_proposicao_por_docid",
+        "docid": docid,
+        "tipoprop": tipoprop
+    }
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    logs.append(f"🔗 Acessando: {url} com docid={docid} e tipoprop={tipoprop}")
 
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.post(url, data=payload, headers=headers, timeout=30)
         response.raise_for_status()
 
         dados = response.json()
 
-        titulo = dados.get("tipo", "Título não encontrado") + " " + dados.get("numero", "") + "/" + dados.get("ano", "")
+        if not dados:
+            raise Exception("❌ Nenhum dado retornado da API.")
+
+        titulo = dados.get("tipo_proposicao", "Título não encontrado") + " " + dados.get("numero_proposicao", "") + "/" + dados.get("ano_proposicao", "")
         ementa = dados.get("ementa", "Ementa não encontrada")
         situacao = dados.get("situacao", "Situação não encontrada")
-        data_apresentacao = dados.get("data_apresentacao", "Data não encontrada")
+        historico = dados.get("historico", "Histórico não encontrado")
+        info_complementar = dados.get("informacoes_complementares", "Informações complementares não encontradas")
 
         logs.append("✅ Dados capturados com sucesso")
 
@@ -36,8 +50,9 @@ def consultar_api_alepe(docid):
             "titulo": titulo,
             "ementa": ementa,
             "situacao": situacao,
-            "data_apresentacao": data_apresentacao,
-            "url": url,
+            "historico": historico,
+            "info_complementar": info_complementar,
+            "url": f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}",
             "log": logs
         }
 
@@ -50,12 +65,20 @@ def consultar_api_alepe(docid):
 def gerar_template_email(dados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
+    historico = dados['historico'].replace("\n", "<br>")
+    info_complementar = dados['info_complementar'].replace("\n", "<br>")
+
     html = f"""
     <div style="font-family:Arial; color:#333;">
         <h2 style="color:#004b87;">{dados['titulo']}</h2>
         <p><strong>Ementa:</strong><br>{dados['ementa']}</p>
         <p><strong>Situação:</strong> {dados['situacao']}</p>
-        <p><strong>Data de Apresentação:</strong> {dados['data_apresentacao']}</p>
+        <hr>
+        <h3 style="color:#004b87;">Histórico</h3>
+        <p>{historico}</p>
+        <hr>
+        <h3 style="color:#004b87;">Informações Complementares</h3>
+        <p>{info_complementar}</p>
         <hr>
         <p>
             <small>Consulta realizada em {agora} | 
@@ -79,16 +102,17 @@ def enviar_email(assunto, corpo_html, logs):
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
-def executar_robot(docid=None):
+def executar_robot(docid=None, tipoprop=None):
     print("🚀 Iniciando execução do Alepe_GPT com API")
     docid = docid or DOCID
+    tipoprop = tipoprop or TIPOPROP
 
-    if not docid:
-        erro = "❌ DOCID não definido na função ou no .env"
+    if not docid or not tipoprop:
+        erro = "❌ DOCID ou TIPOPROP não definidos na função ou no .env"
         print(erro)
         return {"status": "erro", "logs": [erro]}
 
-    dados = consultar_api_alepe(docid)
+    dados = consultar_api_alepe(docid, tipoprop)
 
     if 'erro' in dados:
         assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
