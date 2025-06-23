@@ -1,15 +1,9 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+from playwright.sync_api import sync_playwright
 import yagmail
 from datetime import datetime
-import time
 import os
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -18,49 +12,39 @@ EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 DOCID = os.getenv("DOCID")
 TIPOPROP = os.getenv("TIPOPROP")
 
+
 def consultar_proposicao(docid, tipoprop):
     url = f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}"
 
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--window-size=1920,1080")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        page.goto(url, timeout=60000)
 
-    try:
-        driver.get(url)
-        time.sleep(3)
-
-        titulo = driver.find_element(By.CSS_SELECTOR, "h1.titulo").text
-        ementa = driver.find_element(By.CSS_SELECTOR, "div.ementa").text
+        titulo = page.locator("h1.titulo").inner_text()
+        ementa = page.locator("div.ementa").inner_text()
 
         try:
-            historico = driver.find_element(By.XPATH, "//div[@id='historico']").text
+            historico = page.locator("#historico").inner_text()
         except:
             historico = "Não encontrado"
 
         try:
-            info_complementar = driver.find_element(By.XPATH, "//div[@id='informacoesComplementares']").text
+            info_complementar = page.locator("#informacoesComplementares").inner_text()
         except:
             info_complementar = "Não encontrado"
 
-        dados = {
+        browser.close()
+
+        return {
             "titulo": titulo,
             "ementa": ementa,
             "historico": historico,
             "info_complementar": info_complementar,
             "url": url
         }
-        return dados
 
-    except Exception as e:
-        print(f"Erro: {e}")
-        return None
-
-    finally:
-        driver.quit()
 
 def gerar_template_email(dados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
@@ -83,6 +67,7 @@ def gerar_template_email(dados):
     """
     return html
 
+
 def enviar_email(assunto, corpo_html, destinatario, remetente, senha_app):
     try:
         yag = yagmail.SMTP(remetente, senha_app)
@@ -91,9 +76,10 @@ def enviar_email(assunto, corpo_html, destinatario, remetente, senha_app):
             subject=assunto,
             contents=corpo_html
         )
-        print("E-mail enviado com sucesso!")
+        print("✅ E-mail enviado com sucesso!")
     except Exception as e:
-        print(f"Erro ao enviar e-mail: {e}")
+        print(f"❌ Erro ao enviar e-mail: {e}")
+
 
 if __name__ == "__main__":
     dados = consultar_proposicao(DOCID, TIPOPROP)
