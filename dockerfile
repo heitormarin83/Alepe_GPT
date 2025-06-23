@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY . /app
 
-# Instala dependências de sistema (pode ser opcional com --with-deps, mas não atrapalha deixar)
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -23,11 +22,11 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala dependências Python
+# Instala Python deps
 RUN pip install --upgrade pip --no-cache-dir
 RUN pip install -r requirements.txt --no-cache-dir
 
-# 🔥 Aqui está a chave para funcionar:
+# 🔥 OBRIGATÓRIO: instala os browsers (Chromium, Firefox, Webkit)
 RUN playwright install --with-deps
 
 EXPOSE 8000
