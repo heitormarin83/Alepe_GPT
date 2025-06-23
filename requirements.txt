@@ -1,5 +1,5 @@
-playwright
-yagmail
-python-dotenv
-fastapi
-uvicorn
+fastapi==0.110.0
+uvicorn==0.29.0
+playwright==1.52.0
+yagmail==0.15.293
+python-dotenv==1.0.1
