@@ -1,3 +1,5 @@
 playwright
 yagmail
 python-dotenv
+fastapi
+uvicorn
