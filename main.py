@@ -30,7 +30,11 @@ def consultar_proposicao(proposicao, numero, ano):
             logs.append("⚠️ Resposta vazia da API.")
             return {"erro": "Resposta vazia", "logs": logs}
 
-        dados = response.json()
+        try:
+            dados = response.json()
+        except Exception as e:
+            logs.append(f"❌ Erro ao converter JSON: {e}")
+            return {"erro": "JSON inválido", "logs": logs}
 
         if not dados:
             logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
@@ -79,6 +83,6 @@ def executar_robot(proposicao, numero, ano):
 
 
 if __name__ == "__main__":
-    # 🔥 Informe os dados corretamente
-    resultado = executar_robot("projetos", "3005", "2025")
+    # 🔥 Teste com dados válidos
+    resultado = executar_robot("projetos", "1", "2023")
     print(resultado)
