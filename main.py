@@ -58,7 +58,9 @@ def gerar_template_email(dados):
         <p><strong>Ementa:</strong><br>{dados['ementa']}</p>
         <hr>
         <h3 style="color:#004b87;">Histórico</h3>
-        <p>{dados['historico'].replace("\n", "<br>")}</p>
+       historico_formatado = dados['historico'].replace("\n", "<br>")
+html = f"""
+    <p>{historico_formatado}</p>
         <hr>
         <h3 style="color:#004b87;">Informações Complementares</h3>
         <p>{dados['info_complementar'].replace("\n", "<br>")}</p>
