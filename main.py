@@ -5,7 +5,6 @@ import os
 from dotenv import load_dotenv
 
 
-# Carregar variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -18,15 +17,13 @@ TIPOPROP = os.getenv("TIPOPROP")
 def consultar_proposicao(docid, tipoprop):
     print("🚀 Iniciando captura da proposição")
     url = f"https://www.alepe.pe.gov.br/proposicao-texto-completo/?docid={docid}&tipoprop={tipoprop}"
-    print(f"🔗 URL da proposição: {url}")
+    print(f"🔗 Acessando: {url}")
 
     try:
         with sync_playwright() as p:
-            print("🌐 Abrindo navegador headless")
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            print("⏳ Acessando a página...")
             page.goto(url, timeout=60000)
 
             titulo = page.locator("h1.titulo").inner_text()
@@ -54,7 +51,7 @@ def consultar_proposicao(docid, tipoprop):
             }
 
     except Exception as e:
-        print(f"❌ Erro na captura dos dados: {e}")
+        print(f"❌ Erro na captura: {e}")
         return None
 
 
@@ -81,12 +78,12 @@ def gerar_template_email(dados):
     return html
 
 
-def enviar_email(assunto, corpo_html, destinatario, remetente, senha_app):
+def enviar_email(assunto, corpo_html):
     print("📧 Preparando envio de e-mail")
     try:
-        yag = yagmail.SMTP(remetente, senha_app)
+        yag = yagmail.SMTP(EMAIL_USER, EMAIL_APP_PASSWORD)
         yag.send(
-            to=destinatario,
+            to=EMAIL_RECIPIENT,
             subject=assunto,
             contents=corpo_html
         )
@@ -104,7 +101,7 @@ def validar_variaveis():
         if not valor:
             print(f"⚠️ Variável de ambiente {nome} não definida!")
             return False
-    print("✔️ Todas as variáveis de ambiente estão definidas.")
+    print("✔️ Todas as variáveis estão definidas.")
     return True
 
 
@@ -112,14 +109,15 @@ if __name__ == "__main__":
     print("🚀 Iniciando execução do Alepe_GPT")
 
     if not validar_variaveis():
-        print("❌ Encerrando execução por falta de variáveis de ambiente")
+        print("❌ Encerrando execução. Variáveis faltando.")
         exit(1)
 
     dados = consultar_proposicao(DOCID, TIPOPROP)
 
     if dados:
+        print("🟩 Dados capturados:", dados)
         corpo_email = gerar_template_email(dados)
         assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, corpo_email, EMAIL_RECIPIENT, EMAIL_USER, EMAIL_APP_PASSWORD)
+        enviar_email(assunto, corpo_email)
     else:
         print("❌ Não foi possível capturar os dados da proposição.")
