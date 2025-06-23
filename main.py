@@ -10,6 +10,8 @@ load_dotenv()
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
+DOCID = os.getenv("DOCID")
+TIPOPROP = os.getenv("TIPOPROP")
 
 
 def consultar_proposicao(docid, tipoprop):
@@ -105,8 +107,12 @@ def enviar_email(assunto, corpo_html, logs):
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
-def executar_robot_parametrizado(docid, tipoprop):
+def executar_robot(docid=None, tipoprop=None):
     print("🚀 Iniciando execução do Alepe_GPT")
+
+    docid = docid or DOCID
+    tipoprop = tipoprop or TIPOPROP
+
     dados = consultar_proposicao(docid, tipoprop)
 
     if 'erro' in dados:
@@ -117,9 +123,9 @@ def executar_robot_parametrizado(docid, tipoprop):
     corpo_email = gerar_template_email(dados)
     assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
     enviar_email(assunto, corpo_email, dados['log'])
-    return {"status": "sucesso", "dados": dados}
+    return {"status": "sucesso", "dados": dados, "logs": dados['log']}
 
 
 if __name__ == "__main__":
-    resultado = executar_robot_parametrizado("15016", "p")
+    resultado = executar_robot()
     print(resultado)
