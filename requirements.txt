@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-playwright
-yagmail
+requests
 python-dotenv
+yagmail
