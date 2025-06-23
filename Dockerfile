@@ -10,6 +10,7 @@ COPY . /app
 # Instalar dependências do Python
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
+RUN playwright install
 
 # Comando padrão
 CMD ["python", "main.py"]
