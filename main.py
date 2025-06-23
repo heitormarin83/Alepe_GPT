@@ -4,7 +4,7 @@ import yagmail
 import os
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente
+# Carrega variáveis de ambiente
 load_dotenv()
 
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -32,18 +32,18 @@ def consultar_proposicao(proposicao, numero, ano):
             return {"erro": "Resposta vazia", "logs": logs}
 
         try:
-            dados = response.json()
+            data = response.json()
         except Exception as e:
             logs.append(f"❌ Erro ao converter JSON: {e}")
             logs.append(f"📝 Conteúdo retornado: {response.text}")
             return {"erro": "JSON inválido ou resposta fora do padrão", "logs": logs}
 
-        if not dados:
+        if not data:
             logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
             return {"erro": "Nenhum dado encontrado", "logs": logs}
 
         logs.append("✅ Dados capturados com sucesso")
-        return {"dados": dados, "logs": logs}
+        return {"dados": data, "logs": logs}
 
     except Exception as e:
         logs.append(f"❌ Erro na requisição: {e}")
@@ -85,6 +85,5 @@ def executar_robot(proposicao, numero, ano):
 
 
 if __name__ == "__main__":
-    # ⚙️ Defina aqui qual proposição quer buscar
-    resultado = executar_robot("projetos", "1", "2023")
+    resultado = executar_robot("projetos", "3005", "2025")
     print(resultado)
