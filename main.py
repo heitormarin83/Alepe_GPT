@@ -4,9 +4,9 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
+# Carregar variáveis de ambiente
 load_dotenv()
 
-# Variáveis de ambiente
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
@@ -25,15 +25,16 @@ def consultar_proposicao(docid, tipoprop):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            page.goto(url, timeout=120000)  # Aumentei o timeout para carregar
+            page.goto(url, timeout=120000)
 
             def captura_seletor(seletor, descricao):
                 try:
                     page.wait_for_selector(seletor, timeout=30000)
                     valor = page.locator(seletor).inner_text()
+                    logs.append(f"✅ {descricao} capturado com sucesso")
                     return valor
                 except PlaywrightTimeoutError:
-                    logs.append(f"⚠️ {descricao} não encontrado.")
+                    logs.append(f"⚠️ {descricao} não encontrado (timeout).")
                     return f"{descricao} não encontrado"
                 except Exception as e:
                     logs.append(f"❌ Erro ao capturar {descricao}: {e}")
@@ -101,25 +102,27 @@ def enviar_email(assunto, corpo_html, logs):
 
 def executar_robot(docid=None, tipoprop=None):
     print("🚀 Iniciando execução do Alepe_GPT")
+
+    # Se não for passado na função, usa o .env
     docid = docid or DOCID
     tipoprop = tipoprop or TIPOPROP
+
+    if not docid or not tipoprop:
+        erro = "❌ DOCID ou TIPOPROP não definidos na função ou no .env"
+        print(erro)
+        return {"status": "erro", "logs": [erro]}
 
     dados = consultar_proposicao(docid, tipoprop)
 
     if 'erro' in dados:
         assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, "Erro na execução", dados.get('log', []))
+        enviar_email(assunto, "❌ Erro na execução", dados.get('log', []))
         return {"status": "erro", "logs": dados['log']}
 
     corpo_email = gerar_template_email(dados)
     assunto = f"Acompanhamento ALEPE - {dados['titulo']} - {datetime.now().strftime('%d/%m/%Y')}"
     enviar_email(assunto, corpo_email, dados['log'])
     return {"status": "sucesso", "dados": dados, "logs": dados['log']}
-
-
-if __name__ == "__main__":
-    resultado = executar_robot()
-    print(resultado)
 
 
 if __name__ == "__main__":
