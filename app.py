@@ -3,11 +3,9 @@ from main import executar_robot_parametrizado
 
 app = FastAPI()
 
-
 @app.get("/")
 def read_root():
     return {"status": "OK", "message": "Alepe GPT API rodando."}
-
 
 @app.get("/run")
 def run_robot(
