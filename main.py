@@ -10,11 +10,8 @@ load_dotenv()
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
-PROPOSICAO = os.getenv("PROPOSICAO")
-NUMERO = os.getenv("NUMERO")
-ANO = os.getenv("ANO")
 
-# Arquivos locais para armazenamento
+# Arquivos para armazenar o histórico anterior
 HISTORICO_FILE = "historico_anterior.txt"
 INFO_COMP_FILE = "info_complementar_anterior.txt"
 
@@ -34,24 +31,40 @@ def consultar_proposicao(proposicao, numero, ano):
             logs.append(f"❌ Erro na API: {response.status_code} - {response.text}")
             return {"erro": f"API retornou status {response.status_code}", "logs": logs}
 
+        if not response.text.strip():
+            logs.append("⚠️ Resposta vazia da API.")
+            return {"erro": "Resposta vazia", "logs": logs}
+
+        if 'application/json' not in response.headers.get('Content-Type', ''):
+            logs.append(f"❌ Conteúdo não é JSON: {response.text}")
+            return {"erro": "Resposta não é JSON", "logs": logs}
+
         data = response.json()
 
-        if not data or not data.get("results"):
-            logs.append("⚠️ Nenhum dado encontrado na resposta.")
+        if not data:
+            logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
             return {"erro": "Nenhum dado encontrado", "logs": logs}
 
-        proposicao_data = data["results"][0]
         logs.append("✅ Dados capturados com sucesso")
-        return {"dados": proposicao_data, "logs": logs}
+        return {"dados": data, "logs": logs}
 
     except Exception as e:
         logs.append(f"❌ Erro na requisição: {e}")
         return {"erro": str(e), "logs": logs}
 
 
+def extrair_dados(dados):
+    historico = dados.get("historico", "Histórico não encontrado")
+    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+    return historico.strip(), info.strip()
+
+
+def comparar_conteudo(atual, anterior):
+    return atual.strip() != anterior.strip()
+
+
 def gerar_template_email(historico, info_complementar):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-
     historico_formatado = historico.replace("\n", "<br>")
     info_formatado = info_complementar.replace("\n", "<br>")
 
@@ -94,13 +107,8 @@ def salvar_dado_atual(arquivo, conteudo):
         f.write(conteudo.strip())
 
 
-def executar_robot(proposicao=None, numero=None, ano=None):
+def executar_robot(proposicao, numero, ano):
     print("🚀 Iniciando execução do Alepe_GPT com API")
-
-    proposicao = proposicao or PROPOSICAO
-    numero = numero or NUMERO
-    ano = ano or ANO
-
     resultado = consultar_proposicao(proposicao, numero, ano)
 
     if 'erro' in resultado:
@@ -109,20 +117,18 @@ def executar_robot(proposicao=None, numero=None, ano=None):
         return {"status": "erro", "logs": resultado['logs']}
 
     dados = resultado['dados']
-    historico = dados.get("historico", "Histórico não encontrado")
-    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+    historico, info = extrair_dados(dados)
 
     historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
     info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
 
-    mudou_historico = historico.strip() != historico_anterior.strip()
-    mudou_info = info.strip() != info_anterior.strip()
+    mudou_historico = comparar_conteudo(historico, historico_anterior)
+    mudou_info = comparar_conteudo(info, info_anterior)
 
-    # Salvar os dados atuais
     salvar_dado_atual(HISTORICO_FILE, historico)
     salvar_dado_atual(INFO_COMP_FILE, info)
 
-    status = "🟩" if not (mudou_historico or mudou_info) else "🟥"
+    status = "🟥" if (mudou_historico or mudou_info) else "🟩"
     data_hoje = datetime.now().strftime('%d/%m/%Y')
     assunto = f"Status ALEPE - {numero}/{ano} - {data_hoje} {status}"
 
@@ -139,5 +145,6 @@ def executar_robot(proposicao=None, numero=None, ano=None):
 
 
 if __name__ == "__main__":
-    executar_robot()
+    executar_robot("projetos", "3005", "2025")
+
 
