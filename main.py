@@ -2,8 +2,8 @@ import requests
 from datetime import datetime
 import yagmail
 import os
+import json
 from dotenv import load_dotenv
-
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -12,9 +12,12 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 
-# Arquivos locais para armazenar dados do dia anterior
-HISTORICO_FILE = "historico_anterior.txt"
-INFO_COMP_FILE = "info_complementar_anterior.txt"
+PROPOSICAO = os.getenv("PROPOSICAO") or "projetos"
+NUMERO = os.getenv("NUMERO") or "3005"
+ANO = os.getenv("ANO") or "2025"
+
+# Arquivo para armazenar o histórico anterior
+DATA_FILE = "dados_anteriores.json"
 
 
 def consultar_proposicao(proposicao, numero, ano):
@@ -57,32 +60,51 @@ def consultar_proposicao(proposicao, numero, ano):
 
 def extrair_dados(dados):
     historico = dados.get("historico", "Histórico não encontrado")
-    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+    info = (
+        dados.get("informacoes_complementares")
+        or dados.get("informacoesComplementares")
+        or "Informações complementares não encontradas"
+    )
     return historico.strip(), info.strip()
 
 
-def comparar_e_obter_status(atual, anterior):
+def carregar_dados_anteriores():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"historico": "", "info_complementar": ""}
+
+
+def salvar_dados_atuais(historico, info_complementar):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            {"historico": historico.strip(), "info_complementar": info_complementar.strip()},
+            f,
+            ensure_ascii=False,
+            indent=4,
+        )
+
+
+def comparar(atual, anterior):
     return atual.strip() != anterior.strip()
 
 
 def gerar_template_email(historico, info_complementar):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    historico_html = historico.replace("\n", "<br>")
+    info_html = info_complementar.replace("\n", "<br>")
 
-    historico_formatado = historico.replace("\n", "<br>")
-    info_formatado = info_complementar.replace("\n", "<br>")
-
-    html = f"""
-    <div style="font-family:Arial;">
+    return f"""
+    <div style="font-family:Arial; color:#333;">
         <h2 style="color:#004b87;">Histórico</h2>
-        <p>{historico_formatado}</p>
+        <p>{historico_html}</p>
         <hr>
         <h2 style="color:#004b87;">Informações Complementares</h2>
-        <p>{info_formatado}</p>
+        <p>{info_html}</p>
         <hr>
         <p><small>Consulta realizada em {agora}</small></p>
     </div>
     """
-    return html
 
 
 def enviar_email(assunto, conteudo, logs):
@@ -98,21 +120,9 @@ def enviar_email(assunto, conteudo, logs):
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 
-def carregar_dado_anterior(arquivo):
-    if os.path.exists(arquivo):
-        with open(arquivo, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return ""
-
-
-def salvar_dado_atual(arquivo, conteudo):
-    with open(arquivo, "w", encoding="utf-8") as f:
-        f.write(conteudo.strip())
-
-
-def executar_robot(proposicao, numero, ano):
+def executar_robot():
     print("🚀 Iniciando execução do Alepe_GPT com API")
-    resultado = consultar_proposicao(proposicao, numero, ano)
+    resultado = consultar_proposicao(PROPOSICAO, NUMERO, ANO)
 
     if 'erro' in resultado:
         assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
@@ -122,24 +132,18 @@ def executar_robot(proposicao, numero, ano):
     dados = resultado['dados']
     historico, info = extrair_dados(dados)
 
-    historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
-    info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
+    anteriores = carregar_dados_anteriores()
 
-    mudou_historico = comparar_e_obter_status(historico, historico_anterior)
-    mudou_info = comparar_e_obter_status(info, info_anterior)
+    mudou_historico = comparar(historico, anteriores.get("historico", ""))
+    mudou_info = comparar(info, anteriores.get("info_complementar", ""))
 
-    # Salvar os dados atuais
-    salvar_dado_atual(HISTORICO_FILE, historico)
-    salvar_dado_atual(INFO_COMP_FILE, info)
+    salvar_dados_atuais(historico, info)
 
-    # Definir status no título
-    status = "🟩" if not (mudou_historico or mudou_info) else "🟥"
+    status_emoji = "🟥" if mudou_historico or mudou_info else "🟩"
     data_hoje = datetime.now().strftime('%d/%m/%Y')
-    assunto = f"Status ALEPE - 3005/2025 - {data_hoje} {status}"
+    assunto = f"Status ALEPE - {NUMERO}/{ANO} - {data_hoje} {status_emoji}"
 
-    # Gerar email
     corpo = gerar_template_email(historico, info)
-
     enviar_email(assunto, corpo, resultado['logs'])
 
     return {
@@ -148,6 +152,10 @@ def executar_robot(proposicao, numero, ano):
         "mudou_info": mudou_info,
         "logs": resultado['logs']
     }
+
+
+if __name__ == "__main__":
+    executar_robot()
 
 
 if __name__ == "__main__":
