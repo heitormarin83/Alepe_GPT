@@ -11,7 +11,7 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
 
-# Arquivos para armazenar o histórico anterior
+# Arquivos locais para armazenar dados do dia anterior
 HISTORICO_FILE = "historico_anterior.txt"
 INFO_COMP_FILE = "info_complementar_anterior.txt"
 
@@ -31,15 +31,16 @@ def consultar_proposicao(proposicao, numero, ano):
             logs.append(f"❌ Erro na API: {response.status_code} - {response.text}")
             return {"erro": f"API retornou status {response.status_code}", "logs": logs}
 
-        if not response.text.strip():
+        if not response.content.strip():
             logs.append("⚠️ Resposta vazia da API.")
             return {"erro": "Resposta vazia", "logs": logs}
 
-        if 'application/json' not in response.headers.get('Content-Type', ''):
-            logs.append(f"❌ Conteúdo não é JSON: {response.text}")
-            return {"erro": "Resposta não é JSON", "logs": logs}
-
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as e:
+            logs.append(f"❌ Erro ao converter JSON: {e}")
+            logs.append(f"📝 Conteúdo retornado: {response.text}")
+            return {"erro": "JSON inválido ou resposta fora do padrão", "logs": logs}
 
         if not data:
             logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
@@ -59,12 +60,13 @@ def extrair_dados(dados):
     return historico.strip(), info.strip()
 
 
-def comparar_conteudo(atual, anterior):
+def comparar_e_obter_status(atual, anterior):
     return atual.strip() != anterior.strip()
 
 
 def gerar_template_email(historico, info_complementar):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+
     historico_formatado = historico.replace("\n", "<br>")
     info_formatado = info_complementar.replace("\n", "<br>")
 
@@ -122,16 +124,19 @@ def executar_robot(proposicao, numero, ano):
     historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
     info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
 
-    mudou_historico = comparar_conteudo(historico, historico_anterior)
-    mudou_info = comparar_conteudo(info, info_anterior)
+    mudou_historico = comparar_e_obter_status(historico, historico_anterior)
+    mudou_info = comparar_e_obter_status(info, info_anterior)
 
+    # Salvar os dados atuais
     salvar_dado_atual(HISTORICO_FILE, historico)
     salvar_dado_atual(INFO_COMP_FILE, info)
 
+    # Definir status no título
     status = "🟥" if (mudou_historico or mudou_info) else "🟩"
     data_hoje = datetime.now().strftime('%d/%m/%Y')
     assunto = f"Status ALEPE - {numero}/{ano} - {data_hoje} {status}"
 
+    # Gerar email
     corpo = gerar_template_email(historico, info)
 
     enviar_email(assunto, corpo, resultado['logs'])
