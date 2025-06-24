@@ -120,41 +120,5 @@ def executar_robot(proposicao, numero, ano):
     print("🚀 Iniciando execução do Alepe_GPT com API")
     resultado = consultar_proposicao(proposicao, numero, ano)
 
-    if 'erro' in resultado:
-        assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, "❌ Erro na execução", resultado['logs'])
-        return {"status": "erro", "logs": resultado['logs']}
+    if 'erro' in res
 
-    dados = resultado['dados']
-    historico, info = extrair_dados(dados)
-
-    historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
-    info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
-
-    mudou_historico = comparar_e_obter_status(historico, historico_anterior)
-    mudou_info = comparar_e_obter_status(info, info_anterior)
-
-    # Salvar os dados atuais
-    salvar_dado_atual(HISTORICO_FILE, historico)
-    salvar_dado_atual(INFO_COMP_FILE, info)
-
-    # Definir status no título
-    status = "🟩" if not (mudou_historico or mudou_info) else "🟥"
-    data_hoje = datetime.now().strftime('%d/%m/%Y')
-    assunto = f"Status ALEPE - {numero}/{ano} - {data_hoje} {status}"
-
-    # Gerar email
-    corpo = gerar_template_email(historico, info)
-
-    enviar_email(assunto, corpo, resultado['logs'])
-
-    return {
-        "status": "sucesso",
-        "mudou_historico": mudou_historico,
-        "mudou_info": mudou_info,
-        "logs": resultado['logs']
-    }
-
-
-if __name__ == "__main__":
-    executar_robot(PROPOSICAO, NUMERO, ANO)
