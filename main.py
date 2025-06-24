@@ -4,152 +4,135 @@ import yagmail
 import os
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente
+# Carrega variáveis de ambiente
 load_dotenv()
-
-EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_USER         = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
-EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
+EMAIL_RECIPIENT    = os.getenv("EMAIL_RECIPIENT")
 
-# Arquivos locais para armazenar dados do dia anterior
-HISTORICO_FILE = "historico_anterior.txt"
-INFO_COMP_FILE = "info_complementar_anterior.txt"
+# Arquivos locais para armazenar o histórico e info complementar do dia anterior
+HISTORICO_FILE     = "historico_anterior.txt"
+INFO_COMP_FILE     = "info_complementar_anterior.txt"
 
 
 def consultar_proposicao(proposicao, numero, ano):
-    logs = []
-    logs.append("🚀 Iniciando captura via API da ALEPE")
-
-    url = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
+    logs = ["🚀 Iniciando captura via API da ALEPE"]
+    url  = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
     logs.append(f"🔗 Acessando API: {url}")
 
     try:
-        response = requests.get(url, timeout=60, headers={"Accept": "application/json"})
-        logs.append(f"📥 Status da resposta: {response.status_code}")
+        resp = requests.get(url, timeout=60, headers={"Accept": "application/json"})
+        logs.append(f"📥 Status da resposta: {resp.status_code}")
 
-        if response.status_code != 200:
-            logs.append(f"❌ Erro na API: {response.status_code} - {response.text}")
-            return {"erro": f"API retornou status {response.status_code}", "logs": logs}
+        if resp.status_code != 200:
+            logs.append(f"❌ API retornou status {resp.status_code}")
+            return {"erro":"Status != 200","logs":logs}
 
-        if not response.content.strip():
-            logs.append("⚠️ Resposta vazia da API.")
-            return {"erro": "Resposta vazia", "logs": logs}
+        if not resp.content.strip():
+            logs.append("⚠️ Resposta vazia")
+            return {"erro":"Resposta vazia","logs":logs}
 
         try:
-            data = response.json()
+            data = resp.json()
         except Exception as e:
-            logs.append(f"❌ Erro ao converter JSON: {e}")
-            logs.append(f"📝 Conteúdo retornado: {response.text}")
-            return {"erro": "JSON inválido ou resposta fora do padrão", "logs": logs}
+            logs.append(f"❌ JSON inválido: {e}")
+            logs.append(f"📝 Texto: {resp.text}")
+            return {"erro":"JSON inválido","logs":logs}
 
         if not data:
-            logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
-            return {"erro": "Nenhum dado encontrado", "logs": logs}
+            logs.append("⚠️ Sem dados")
+            return {"erro":"Sem dados","logs":logs}
 
         logs.append("✅ Dados capturados com sucesso")
-        return {"dados": data, "logs": logs}
+        return {"dados":data, "logs":logs}
 
     except Exception as e:
         logs.append(f"❌ Erro na requisição: {e}")
-        return {"erro": str(e), "logs": logs}
+        return {"erro":str(e), "logs":logs}
 
 
 def extrair_dados(dados):
-    historico = dados.get("historico", "Histórico não encontrado")
-    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+    # Extraímos exatamente os campos que interessam
+    historico = dados.get("historico", "")
+    info      = dados.get("informacoes_complementares", "")
     return historico.strip(), info.strip()
 
 
-def comparar_e_obter_status(atual, anterior):
-    return atual.strip() != anterior.strip()
-
-
-def gerar_template_email(historico, info_complementar):
-    agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-
-    historico_formatado = historico.replace("\n", "<br>")
-    info_formatado = info_complementar.replace("\n", "<br>")
-
-    html = f"""
-    <div style="font-family:Arial;">
-        <h2 style="color:#004b87;">Histórico</h2>
-        <p>{historico_formatado}</p>
-        <hr>
-        <h2 style="color:#004b87;">Informações Complementares</h2>
-        <p>{info_formatado}</p>
-        <hr>
-        <p><small>Consulta realizada em {agora}</small></p>
-    </div>
-    """
-    return html
-
-
-def enviar_email(assunto, conteudo, logs):
-    try:
-        yag = yagmail.SMTP(EMAIL_USER, EMAIL_APP_PASSWORD)
-        yag.send(
-            to=EMAIL_RECIPIENT,
-            subject=assunto,
-            contents=[conteudo, "\n\nLogs:\n" + "\n".join(logs)]
-        )
-        print("✅ E-mail enviado com sucesso!")
-    except Exception as e:
-        print(f"❌ Erro ao enviar e-mail: {e}")
-
-
-def carregar_dado_anterior(arquivo):
-    if os.path.exists(arquivo):
-        with open(arquivo, "r", encoding="utf-8") as f:
+def carregar_anterior(path):
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
             return f.read().strip()
     return ""
 
 
-def salvar_dado_atual(arquivo, conteudo):
-    with open(arquivo, "w", encoding="utf-8") as f:
-        f.write(conteudo.strip())
+def salvar_atual(path, texto):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(texto.strip())
+
+
+def teve_alteracao(atual, anterior):
+    return atual != anterior
+
+
+def gerar_html(historico, info):
+    agora = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    h = historico.replace("\n","<br>")
+    i = info.replace("\n","<br>")
+    return f"""
+    <div style="font-family:Arial;">
+      <h2 style="color:#004b87;">Histórico</h2>
+      <p>{h}</p><hr>
+      <h2 style="color:#004b87;">Informações Complementares</h2>
+      <p>{i}</p><hr>
+      <p><small>Em {agora}</small></p>
+    </div>
+    """
+
+
+def enviar_email(assunto, corpo_html, logs):
+    yag = yagmail.SMTP(EMAIL_USER, EMAIL_APP_PASSWORD)
+    yag.send(
+        to=EMAIL_RECIPIENT,
+        subject=assunto,
+        contents=[corpo_html, "\n\nLogs:\n" + "\n".join(logs)]
+    )
+    print("📧 Email enviado")
 
 
 def executar_robot(proposicao, numero, ano):
-    print("🚀 Iniciando execução do Alepe_GPT com API")
-    resultado = consultar_proposicao(proposicao, numero, ano)
-
-    if 'erro' in resultado:
+    print("🚀 Iniciando execução com API")
+    r = consultar_proposicao(proposicao, numero, ano)
+    if 'erro' in r:
         assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
-        enviar_email(assunto, "❌ Erro na execução", resultado['logs'])
-        return {"status": "erro", "logs": resultado['logs']}
+        enviar_email(assunto, "❌ Erro na execução", r['logs'])
+        return {"status":"erro","logs":r['logs']}
 
-    dados = resultado['dados']
-    historico, info = extrair_dados(dados)
+    dados = r['dados']
+    h_atual, info_atual = extrair_dados(dados)
 
-    historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
-    info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
+    # lê o que tínhamos ontem
+    h_ant = carregar_anterior(HISTORICO_FILE)
+    i_ant = carregar_anterior(INFO_COMP_FILE)
 
-    mudou_historico = comparar_e_obter_status(historico, historico_anterior)
-    mudou_info = comparar_e_obter_status(info, info_anterior)
+    muda_h = teve_alteracao(h_atual, h_ant)
+    muda_i = teve_alteracao(info_atual, i_ant)
 
-    # Salvar os dados atuais
-    salvar_dado_atual(HISTORICO_FILE, historico)
-    salvar_dado_atual(INFO_COMP_FILE, info)
+    # salva para amanhã
+    salvar_atual(HISTORICO_FILE, h_atual)
+    salvar_atual(INFO_COMP_FILE, info_atual)
 
-    # Definir status no título
-    status = "🟥" if (mudou_historico or mudou_info) else "🟩"
-    data_hoje = datetime.now().strftime('%d/%m/%Y')
-    assunto = f"Status ALEPE - {numero}/{ano} - {data_hoje} {status}"
+    # monta status
+    status = "🟥" if (muda_h or muda_i) else "🟩"
+    assunto = f"Status ALEPE - {numero}/{ano} - {datetime.now().strftime('%d/%m/%Y')} {status}"
 
-    # Gerar email
-    corpo = gerar_template_email(historico, info)
+    # corpo
+    html = gerar_html(h_atual, info_atual)
+    enviar_email(assunto, html, r['logs'])
 
-    enviar_email(assunto, corpo, resultado['logs'])
-
-    return {
-        "status": "sucesso",
-        "mudou_historico": mudou_historico,
-        "mudou_info": mudou_info,
-        "logs": resultado['logs']
-    }
+    return {"status":"sucesso","muda_historico":muda_h,"muda_info":muda_i}
 
 
 if __name__ == "__main__":
-    executar_robot("projetos", "3005", "2025")
-
+    resultado = executar_robot("projetos","3005","2025")
+    print(resultado)
 
