@@ -10,11 +10,11 @@ load_dotenv()
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
-PROPOSICAO = os.getenv("PROPOSICAO", "projetos")
-NUMERO = os.getenv("NUMERO", "3005")
-ANO = os.getenv("ANO", "2025")
+PROPOSICAO = os.getenv("PROPOSICAO")
+NUMERO = os.getenv("NUMERO")
+ANO = os.getenv("ANO")
 
-# Arquivos locais para armazenar os dados do dia anterior
+# Arquivos locais para armazenamento
 HISTORICO_FILE = "historico_anterior.txt"
 INFO_COMP_FILE = "info_complementar_anterior.txt"
 
@@ -34,41 +34,19 @@ def consultar_proposicao(proposicao, numero, ano):
             logs.append(f"❌ Erro na API: {response.status_code} - {response.text}")
             return {"erro": f"API retornou status {response.status_code}", "logs": logs}
 
-        if not response.text.strip():
-            logs.append("⚠️ Resposta vazia da API.")
-            return {"erro": "Resposta vazia", "logs": logs}
+        data = response.json()
 
-        if 'application/json' not in response.headers.get('Content-Type', ''):
-            logs.append(f"❌ A resposta não é JSON. Content-Type: {response.headers.get('Content-Type')}")
-            return {"erro": "Resposta não é JSON", "logs": logs}
-
-        try:
-            data = response.json()
-        except Exception as e:
-            logs.append(f"❌ Erro ao converter JSON: {e}")
-            logs.append(f"📝 Conteúdo retornado: {response.text}")
-            return {"erro": "JSON inválido ou resposta fora do padrão", "logs": logs}
-
-        if not data:
-            logs.append("⚠️ Nenhum dado encontrado para essa proposição.")
+        if not data or not data.get("results"):
+            logs.append("⚠️ Nenhum dado encontrado na resposta.")
             return {"erro": "Nenhum dado encontrado", "logs": logs}
 
+        proposicao_data = data["results"][0]
         logs.append("✅ Dados capturados com sucesso")
-        return {"dados": data, "logs": logs}
+        return {"dados": proposicao_data, "logs": logs}
 
     except Exception as e:
         logs.append(f"❌ Erro na requisição: {e}")
         return {"erro": str(e), "logs": logs}
-
-
-def extrair_dados(dados):
-    historico = dados.get("historico", "Histórico não encontrado")
-    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
-    return historico.strip(), info.strip()
-
-
-def comparar_e_obter_status(atual, anterior):
-    return atual.strip() != anterior.strip()
 
 
 def gerar_template_email(historico, info_complementar):
@@ -78,7 +56,7 @@ def gerar_template_email(historico, info_complementar):
     info_formatado = info_complementar.replace("\n", "<br>")
 
     html = f"""
-    <div style="font-family:Arial; color:#333;">
+    <div style="font-family:Arial;">
         <h2 style="color:#004b87;">Histórico</h2>
         <p>{historico_formatado}</p>
         <hr>
@@ -116,9 +94,50 @@ def salvar_dado_atual(arquivo, conteudo):
         f.write(conteudo.strip())
 
 
-def executar_robot(proposicao, numero, ano):
+def executar_robot(proposicao=None, numero=None, ano=None):
     print("🚀 Iniciando execução do Alepe_GPT com API")
+
+    proposicao = proposicao or PROPOSICAO
+    numero = numero or NUMERO
+    ano = ano or ANO
+
     resultado = consultar_proposicao(proposicao, numero, ano)
 
-    if 'erro' in res
+    if 'erro' in resultado:
+        assunto = f"[ERRO] Alepe GPT - {datetime.now().strftime('%d/%m/%Y')}"
+        enviar_email(assunto, "❌ Erro na execução", resultado['logs'])
+        return {"status": "erro", "logs": resultado['logs']}
+
+    dados = resultado['dados']
+    historico = dados.get("historico", "Histórico não encontrado")
+    info = dados.get("informacoes_complementares", "Informações complementares não encontradas")
+
+    historico_anterior = carregar_dado_anterior(HISTORICO_FILE)
+    info_anterior = carregar_dado_anterior(INFO_COMP_FILE)
+
+    mudou_historico = historico.strip() != historico_anterior.strip()
+    mudou_info = info.strip() != info_anterior.strip()
+
+    # Salvar os dados atuais
+    salvar_dado_atual(HISTORICO_FILE, historico)
+    salvar_dado_atual(INFO_COMP_FILE, info)
+
+    status = "🟩" if not (mudou_historico or mudou_info) else "🟥"
+    data_hoje = datetime.now().strftime('%d/%m/%Y')
+    assunto = f"Status ALEPE - {numero}/{ano} - {data_hoje} {status}"
+
+    corpo = gerar_template_email(historico, info)
+
+    enviar_email(assunto, corpo, resultado['logs'])
+
+    return {
+        "status": "sucesso",
+        "mudou_historico": mudou_historico,
+        "mudou_info": mudou_info,
+        "logs": resultado['logs']
+    }
+
+
+if __name__ == "__main__":
+    executar_robot()
 
