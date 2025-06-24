@@ -9,7 +9,7 @@ def read_root():
 
 @app.get("/run")
 def run_robot(
-    proposicao: str = Query(..., description="Tipo da proposição (ex: projetos, indicacoes, requerimentos)"),
+    proposicao: str = Query("projetos", description="Tipo da proposição"),
     numero: str = Query(..., description="Número da proposição"),
     ano: str = Query(..., description="Ano da proposição")
 ):
