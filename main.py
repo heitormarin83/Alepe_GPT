@@ -12,50 +12,51 @@ EMAIL_USER         = os.getenv("EMAIL_USER")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 EMAIL_RECIPIENT    = os.getenv("EMAIL_RECIPIENT")
 
-# Parâmetros da proposição (pode ser override via __main__)
+# Defaults (podem ser sobrescritos na chamada)
 PROPOSICAO = os.getenv("PROPOSICAO", "projetos")
 NUMERO     = os.getenv("NUMERO", "3005")
 ANO        = os.getenv("ANO", "2025")
 
-# Arquivos de persistência local
+# Arquivos locais (persistência efêmera)
 HISTORICO_FILE = "historico_anterior.txt"
 INFO_FILE      = "info_complementar_anterior.txt"
 
 
 def consultar_proposicao(proposicao, numero, ano):
     logs = ["🚀 Iniciando consulta via API da ALEPE"]
-    url = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
+    url  = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
     logs.append(f"🔗 GET {url}")
 
     try:
-        resp = requests.get(url, headers={"Accept": "application/json, application/xml"}, timeout=60)
+        resp = requests.get(
+            url,
+            headers={"Accept": "application/json, application/xml"},
+            timeout=60
+        )
         logs.append(f"📥 Status da resposta: {resp.status_code}")
         if resp.status_code != 200:
             logs.append(f"❌ API retornou status {resp.status_code}")
             return {"erro": f"Status {resp.status_code}", "logs": logs}
-        if not resp.text.strip():
+
+        text = resp.text or ""
+        if not text.strip():
             logs.append("⚠️ Resposta vazia")
             return {"erro": "Resposta vazia", "logs": logs}
-        content_type = resp.headers.get("Content-Type", "")
-        return {
-            "text": resp.text,
-            "content_type": content_type,
-            "logs": logs
-        }
+
+        ctype = resp.headers.get("Content-Type", "")
+        return {"text": text, "content_type": ctype, "logs": logs}
+
     except Exception as e:
         logs.append(f"❌ Erro na requisição: {e}")
         return {"erro": str(e), "logs": logs}
 
 
 def extrair_dados_xml(xml_text):
-    """
-    Extrai histórico e informações complementares de um XML.
-    """
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return "", ""
-    # Histórico
+    # Extrai eventos
     eventos = root.findall(".//historico/evento")
     historico = []
     for ev in eventos:
@@ -64,7 +65,7 @@ def extrair_dados_xml(xml_text):
         if data or acao:
             historico.append(f"{data} — {acao}")
     hist_text = "\n".join(historico) if historico else "Histórico não encontrado"
-    # Informações Complementares
+    # Extrai info complementar
     info = root.findtext(".//informacoesComplementares")
     info_text = info.strip() if info and info.strip() else "Informações complementares não encontradas"
     return hist_text, info_text
@@ -83,20 +84,20 @@ def salvar_atual(path, texto):
 
 
 def gerar_html(historico, info):
-    agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     h = historico.replace("\n", "<br>")
     i = info.replace("\n", "<br>")
     return f"""
-    <div style="font-family:Arial;">
-      <h2 style="color:#004b87;">Histórico</h2>
-      <p>{h}</p>
-      <hr>
-      <h2 style="color:#004b87;">Informações Complementares</h2>
-      <p>{i}</p>
-      <hr>
-      <p><small>Consulta realizada em {agora}</small></p>
-    </div>
-    """
+<div style="font-family:Arial,sans-serif;">
+  <h2 style="color:#004b87;">Histórico</h2>
+  <p>{h}</p>
+  <hr>
+  <h2 style="color:#004b87;">Informações Complementares</h2>
+  <p>{i}</p>
+  <hr>
+  <p><small>Consulta realizada em {ts}</small></p>
+</div>
+"""
 
 
 def enviar_email(assunto, html, logs):
@@ -112,46 +113,46 @@ def enviar_email(assunto, html, logs):
 def executar_robot(proposicao, numero, ano):
     # 1) Consulta
     res = consultar_proposicao(proposicao, numero, ano)
-    if 'erro' in res:
-        assunto = f"[ERRO] ALEPE {numero}/{ano} - {datetime.now():%d/%m/%Y}"
-        enviar_email(assunto, f"<p>{res['erro']}</p>", res['logs'])
+    if "erro" in res:
+        subj = f"[ERRO] ALEPE {numero}/{ano} - {datetime.now():%d/%m/%Y}"
+        enviar_email(subj, f"<p>{res['erro']}</p>", res["logs"])
         return
 
     text = res["text"]
-    ctype = res["content_type"]
-    logs = res["logs"]
+    ctype = res["content_type"].lower()
+    logs  = res["logs"]
 
-    # 2) Extrair dados
-    if ctype.startswith("application/xml") or text.lstrip().startswith("<"):
+    # 2) Extrai histórico & info
+    if "xml" in ctype or text.lstrip().startswith("<"):
         historico, info = extrair_dados_xml(text)
+        logs.append("✅ XML parseado com sucesso")
     else:
         try:
             payload = json.loads(text)
-            item = payload.get("results", [])[0]
+            item    = payload.get("results", [{}])[0]
             historico = item.get("historico", "").strip() or "Histórico não encontrado"
             info      = item.get("informacoes_complementares", "").strip() or "Informações complementares não encontradas"
             logs.append("✅ JSON parseado com sucesso")
         except Exception as e:
             logs.append(f"❌ Falha ao tratar JSON: {e}")
-            historico, info = "", ""
+            historico, info = "",""
 
-    # 3) Carregar valores anteriores
+    # 3) Carrega valores de ontem
     prev_h = carregar_anterior(HISTORICO_FILE)
     prev_i = carregar_anterior(INFO_FILE)
 
-    # 4) Comparar
+    # 4) Compara
     mudou = (historico != prev_h) or (info != prev_i)
 
-    # 5) Salvar para próxima execução
+    # 5) Salva para próxima vez
     salvar_atual(HISTORICO_FILE, historico)
     salvar_atual(INFO_FILE, info)
 
-    # 6) Montar e-mail
-    status = "🟥" if mudou else "🟩"
-    assunto = f"Status ALEPE - {numero}/{ano} - {datetime.now():%d/%m/%Y} {status}"
-    html = gerar_html(historico, info)
-
-    enviar_email(assunto, html, logs)
+    # 6) Monta e envia e-mail
+    emoji = "🟥" if mudou else "🟩"
+    subj  = f"Status ALEPE - {numero}/{ano} - {datetime.now():%d/%m/%Y} {emoji}"
+    html  = gerar_html(historico, info)
+    enviar_email(subj, html, logs)
 
 
 if __name__ == "__main__":
