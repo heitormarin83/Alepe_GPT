@@ -1,16 +1,19 @@
+# Usa imagem leve
 FROM python:3.10-slim
 
+# Define diretório de trabalho
 WORKDIR /app
 
+# Copia todo o projeto
 COPY . /app
 
-RUN apt-get update && apt-get install -y \
-    libnss3 libatk-bridge2.0-0 libgtk-3-0 libx11-xcb1 \
-    libxcomposite1 libxdamage1 libxrandr2 libxfixes3 \
-    libc6 libxext6 libx11-6 libasound2 libgbm1 \
-    && rm -rf /var/lib/apt/lists/*
+# Instala apenas o que for necessário
+RUN pip install --upgrade pip \
+ && pip install -r requirements.txt
 
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Expõe a porta (padrão 8000) — será sobrescrita pelo Railway em $PORT
+ENV PORT=${PORT:-8000}
+EXPOSE ${PORT}
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Usa shell form para interpolar a variável $PORT
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port $PORT"]
