@@ -8,68 +8,82 @@ from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente
 load_dotenv()
-EMAIL_USER          = os.getenv("EMAIL_USER")
-EMAIL_APP_PASSWORD  = os.getenv("EMAIL_APP_PASSWORD")
-EMAIL_RECIPIENT     = os.getenv("EMAIL_RECIPIENT")
+EMAIL_USER         = os.getenv("EMAIL_USER")
+EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
+EMAIL_RECIPIENT    = os.getenv("EMAIL_RECIPIENT")
 
-def montar_session_com_retries(retries=3, backoff=1, status_forcelist=None):
-    """Cria uma session com retry e backoff para GETs."""
-    session = requests.Session()
+def montar_session_com_retries(
+    total_retries=5,
+    backoff_factor=1,
+    status_forcelist=None
+):
+    """
+    Cria uma Session com retry tanto no connect quanto no read,
+    para respostas 429 e 5xx, e também retry em ConnectTimeout.
+    """
+    status_forcelist = status_forcelist or [429, 500, 502, 503, 504]
     retry = Retry(
-        total=retries,
-        backoff_factor=backoff,
-        status_forcelist=status_forcelist or [429, 500, 502, 503, 504],
+        total=total_retries,
+        connect=total_retries,
+        read=total_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
         allowed_methods=["GET"],
         raise_on_status=False,
+        raise_on_redirect=False
     )
+    sess = requests.Session()
     adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
+    sess.mount("http://", adapter)
+    sess.mount("https://", adapter)
+    return sess
 
 def consultar_proposicao(proposicao, numero, ano):
     logs = ["🚀 Iniciando captura via API da ALEPE"]
     url = f"https://dadosabertos.alepe.pe.gov.br/api/v1/proposicoes/{proposicao}/?numero={numero}&ano={ano}"
     logs.append(f"🔗 GET {url}")
 
-    session = montar_session_com_retries(retries=5, backoff=1)
+    sess = montar_session_com_retries()
     try:
-        resp = session.get(url, timeout=(10, 20), headers={"Accept": "application/json"})
-        logs.append(f"📥 Status HTTP: {resp.status_code}")
+        # timeout=(connect_timeout, read_timeout)
+        resp = sess.get(url, timeout=(30, 60), headers={
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; AlepeBot/1.0)"
+        })
+        logs.append(f"📥 HTTP {resp.status_code}")
 
         if resp.status_code != 200:
-            logs.append(f"❌ API retornou {resp.status_code}: {resp.text}")
+            logs.append(f"❌ API retornou {resp.status_code}: {resp.text[:200]}…")
             return {"erro": f"HTTP {resp.status_code}", "logs": logs}
 
         if not resp.text.strip():
-            logs.append("⚠️ Corpo vazio")
-            return {"erro": "Resposta vazia", "logs": logs}
+            logs.append("⚠️ Resposta vazia")
+            return {"erro": "vazio", "logs": logs}
 
         try:
             data = resp.json()
         except Exception as e:
-            logs.append(f"❌ JSON inválido: {e}")
-            logs.append(f"📝 Preview: {resp.text[:200]}…")
-            return {"erro": "JSON inválido", "logs": logs}
+            logs.append(f"❌ Falha no JSON: {e}")
+            logs.append(f"📝 Preview texto: {resp.text[:200]}…")
+            return {"erro": "json", "logs": logs}
 
-        logs.append("✅ Dados válidos recebidos")
+        logs.append("✅ JSON OK")
         return {"dados": data, "logs": logs}
 
     except requests.exceptions.ConnectTimeout:
-        logs.append("❌ Timeout de conexão")
+        logs.append("❌ ConnectTimeout")
         return {"erro": "ConnectTimeout", "logs": logs}
     except requests.exceptions.ReadTimeout:
-        logs.append("❌ Timeout de leitura")
+        logs.append("❌ ReadTimeout")
         return {"erro": "ReadTimeout", "logs": logs}
     except Exception as e:
-        logs.append(f"❌ Erro na requisição: {e}")
+        logs.append(f"❌ Erro inesperado: {e}")
         return {"erro": str(e), "logs": logs}
 
 def extrair_dados(dados):
-    """Puxa apenas histórico e info complementares do JSON."""
-    historico = dados.get("historico", "Histórico não encontrado")
-    info      = dados.get("informacoes_complementares", "Informações complementares não encontradas")
-    return historico.strip(), info.strip()
+    hist = dados.get("historico", "")
+    info = dados.get("informacoes_complementares", "")
+    return hist.strip(), info.strip()
 
 def gerar_template_email(historico, info):
     agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -78,9 +92,9 @@ def gerar_template_email(historico, info):
     return f"""
     <div style="font-family:Arial,sans-serif; color:#333;">
       <h2 style="color:#004b87;">Histórico</h2>
-      <p>{h}</p><hr>
+      <p>{h or "<i>(vazio)</i>"}</p><hr>
       <h2 style="color:#004b87;">Informações Complementares</h2>
-      <p>{i}</p><hr>
+      <p>{i or "<i>(vazio)</i>"}</p><hr>
       <p><small>Consulta em {agora}</small></p>
     </div>
     """
@@ -96,20 +110,20 @@ def enviar_email(assunto, corpo, logs):
 
 def executar_robot(proposicao, numero, ano):
     print("🚀 Executando Alepe_GPT")
-    resultado = consultar_proposicao(proposicao, numero, ano)
-    if "erro" in resultado:
+    res = consultar_proposicao(proposicao, numero, ano)
+    if "erro" in res:
         assunto = f"[ERRO] ALEPE – {datetime.now():%d/%m/%Y}"
-        enviar_email(assunto, "❌ Problema na execução", resultado["logs"])
-        return {"status": "erro", "logs": resultado["logs"]}
+        enviar_email(assunto, "<p>❌ Falha na execução</p>", res["logs"])
+        return {"status": "erro", "logs": res["logs"]}
 
-    hist, info = extrair_dados(resultado["dados"])
+    hist, info = extrair_dados(res["dados"])
     assunto = f"Atualização ALEPE – {numero}/{ano} – {datetime.now():%d/%m/%Y}"
     corpo   = gerar_template_email(hist, info)
-
-    enviar_email(assunto, corpo, resultado["logs"])
+    enviar_email(assunto, corpo, res["logs"])
     return {"status": "sucesso"}
 
 if __name__ == "__main__":
     out = executar_robot("projetos", "3005", "2025")
     print(out)
+
 
